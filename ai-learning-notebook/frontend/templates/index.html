@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subjectly</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="ambient ambient-left"></div>
+    <div class="ambient ambient-right"></div>
+
+    <header class="topbar">
+        <div class="brand-lockup">
+            <div class="brand-mark">S</div>
+            <div>
+                <p class="eyebrow">AI Study Platform</p>
+                <h1>Subjectly</h1>
+            </div>
+        </div>
+        <nav class="nav-pills">
+            <a class="nav-pill active" href="#dashboard" data-tab="dashboard">Dashboard</a>
+            <a class="nav-pill" href="#notes" data-tab="notes">Notes</a>
+            <a class="nav-pill" href="#quiz" data-tab="quiz">Quiz</a>
+            <a class="nav-pill" href="#upload" data-tab="upload">Upload</a>
+            <a class="nav-pill" href="#analytics" data-tab="analytics">Analytics</a>
+        </nav>
+    </header>
+
+    <main class="app-shell">
+        <aside class="sidebar card fade-in">
+            <section class="sidebar-section">
+                <p class="eyebrow">Subjects</p>
+                <div class="section-head">
+                    <h2>Your Library</h2>
+                    <button id="refreshSubjects" class="ghost-btn ripple-btn" type="button">Refresh</button>
+                </div>
+                <div id="subjectsList" class="subjects-list"></div>
+                <form id="subjectForm" class="compact-form">
+                    <input id="subjectName" type="text" placeholder="Add subject e.g. Operating Systems" required>
+                    <textarea id="subjectDescription" placeholder="Short subject description"></textarea>
+                    <button class="ripple-btn" type="submit">Create Subject</button>
+                </form>
+            </section>
+        </aside>
+
+        <div class="main-column">
+            <section id="dashboard" class="hero-card card fade-in">
+                <div class="hero-copy">
+                    <p class="eyebrow">Hackathon-Ready Workspace</p>
+                    <h2>Study with cleaner notes, smarter chat, and a workspace that feels premium from the first click.</h2>
+                    <p class="muted">Upload material, organize subjects, ask questions, and keep your learning flow anchored to your own documents.</p>
+                </div>
+                <div class="hero-badges">
+                    <span class="status-pill">FastAPI backend</span>
+                    <span class="status-pill">Groq powered</span>
+                    <span class="status-pill">RAG-ready notes</span>
+                </div>
+            </section>
+
+            <section class="dashboard-grid">
+                <article class="metric-card card fade-in">
+                    <span class="metric-label">Subjects</span>
+                    <strong id="subjectsCount">0</strong>
+                    <p class="muted small">Organized course spaces</p>
+                </article>
+                <article class="metric-card card fade-in">
+                    <span class="metric-label">Files</span>
+                    <strong id="documentsCount">0</strong>
+                    <p class="muted small">Uploaded study sources</p>
+                </article>
+                <article class="metric-card card fade-in">
+                    <span class="metric-label">Notes</span>
+                    <strong id="notesCount">0</strong>
+                    <p class="muted small">Extracted notebook sections</p>
+                </article>
+                <article class="metric-card card fade-in">
+                    <span class="metric-label">Mode</span>
+                    <strong id="modeMetric">Study</strong>
+                    <p class="muted small">Current response style</p>
+                </article>
+            </section>
+
+            <section class="content-grid">
+                <section class="chat-shell card fade-in">
+                    <div class="section-head">
+                        <div>
+                            <p class="eyebrow">Assistant</p>
+                            <h2>Subjectly Chat</h2>
+                        </div>
+                        <div id="modeGroup" class="mode-group">
+                            <button data-mode="study" class="mode-btn ripple-btn active" type="button">Study</button>
+                            <button data-mode="doubt" class="mode-btn ripple-btn" type="button">Doubt</button>
+                            <button data-mode="notes" class="mode-btn ripple-btn" type="button">Notes</button>
+                            <button data-mode="exam" class="mode-btn ripple-btn" type="button">Exam</button>
+                            <button data-mode="revision" class="mode-btn ripple-btn" type="button">Revision</button>
+                        </div>
+                    </div>
+
+                    <div id="chatThread" class="chat-thread">
+                        <div class="message assistant">
+                            <div class="avatar">AI</div>
+                            <div class="bubble markdown-body">
+                                <p><strong>Welcome to Subjectly.</strong></p>
+                                <p>Ask questions from your uploaded notes and get clean answers in a ChatGPT-style workspace.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="thinkingState" class="thinking-state" hidden>
+                        <span class="spinner"></span>
+                        <span>Thinking...</span>
+                    </div>
+
+                    <form id="chatForm" class="composer">
+                        <textarea id="questionInput" class="composer-input" placeholder="Ask from your notes. Example: Explain CPU scheduling in simple words."></textarea>
+                        <div class="composer-footer">
+                            <div class="composer-hint">Current mode: <strong id="activeModeLabel">Study</strong></div>
+                            <div class="composer-actions">
+                                <button id="clearChatBtn" class="ghost-btn ripple-btn" type="button">Clear Chat</button>
+                                <button id="askBtn" class="ripple-btn" type="submit">Ask Subjectly</button>
+                            </div>
+                        </div>
+                    </form>
+                </section>
+
+                <aside class="right-rail">
+                    <section id="upload" class="panel card fade-in">
+                        <div class="section-head">
+                            <div>
+                                <p class="eyebrow">Upload</p>
+                                <h2>Document Manager</h2>
+                            </div>
+                            <span id="selectedSubjectLabel" class="status-pill muted-pill">No subject selected</span>
+                        </div>
+                        <form id="uploadForm" class="compact-form">
+                            <input id="pdfFile" type="file" accept=".pdf" required>
+                            <button class="ripple-btn" type="submit">Upload Source</button>
+                        </form>
+                        <div id="documentsList" class="documents-list"></div>
+                    </section>
+
+                    <section id="analytics" class="panel card fade-in">
+                        <div class="section-head">
+                            <div>
+                                <p class="eyebrow">Analytics</p>
+                                <h2>Quick Signals</h2>
+                            </div>
+                        </div>
+                        <div class="analytics-stack">
+                            <div class="analytics-item">
+                                <span class="analytics-label">Selected subject files</span>
+                                <strong id="selectedSubjectFiles">0</strong>
+                            </div>
+                            <div class="analytics-item">
+                                <span class="analytics-label">Selected subject notes</span>
+                                <strong id="selectedSubjectNotes">0</strong>
+                            </div>
+                            <div class="analytics-item">
+                                <span class="analytics-label">Chat messages saved</span>
+                                <strong id="chatMessagesCount">0</strong>
+                            </div>
+                        </div>
+                        <div class="empty-illustration">
+                            <div class="empty-orb"></div>
+                            <div>
+                                <strong>Future-ready analytics</strong>
+                                <p class="muted small">The layout is prepared for deeper insights, trends, and subject-level productivity stats.</p>
+                            </div>
+                        </div>
+                    </section>
+                </aside>
+            </section>
+
+            <section id="notes" class="panel card fade-in">
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Notes</p>
+                        <h2>Extracted Notes</h2>
+                    </div>
+                </div>
+                <div id="notesContainer" class="notes-container"></div>
+            </section>
+
+            <section id="quiz" class="panel card fade-in">
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Quiz</p>
+                        <h2>Test Yourself</h2>
+                    </div>
+                    <button id="generateTestBtn" class="ghost-btn ripple-btn" type="button">Generate Quiz</button>
+                </div>
+                <div id="quizContainer" class="quiz-container">
+                    <div class="empty-illustration">
+                        <div class="empty-orb empty-orb-warm"></div>
+                        <div>
+                            <strong>No quiz generated yet</strong>
+                            <p class="muted small">Create a quick subject quiz to practice right inside Subjectly.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
