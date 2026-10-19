@@ -8,6 +8,7 @@ const state = {
   mode: "study",
   chatHistory: [],
   quiz: [],
+  quizId: null,
   toastTimer: null,
 };
 
@@ -29,12 +30,21 @@ const selectedSubjectFiles = document.getElementById("selectedSubjectFiles");
 const selectedSubjectNotes = document.getElementById("selectedSubjectNotes");
 const chatMessagesCount = document.getElementById("chatMessagesCount");
 const quizContainer = document.getElementById("quizContainer");
+const uploadButton = document.querySelector("#uploadForm button[type='submit']");
+const uploadButtonLabel = uploadButton.textContent;
 
 async function api(path, options = {}) {
   const response = await fetch(path, options);
   if (!response.ok) {
+    if (response.status === 401) {
+      window.location.assign("/login");
+      throw new Error("Your session ended. Please sign in again.");
+    }
     const error = await response.json().catch(() => ({ detail: "Request failed." }));
-    throw new Error(error.error || error.detail || "Request failed.");
+    const detail = Array.isArray(error.detail)
+      ? error.detail.map((item) => item.msg || "Invalid input").join("; ")
+      : error.detail;
+    throw new Error(error.error || detail || "Request failed.");
   }
   return response.json();
 }
@@ -55,6 +65,7 @@ function formatModeLabel(mode) {
 function buildQuestionPayload(rawQuestion) {
   return {
     question: `[Mode: ${formatModeLabel(state.mode)}]\n${rawQuestion.trim()}`,
+    subject_id: state.selectedSubjectId,
   };
 }
 
@@ -62,23 +73,32 @@ function normalizeMarkdown(text) {
   if (!window.marked) {
     return `<p>${escapeHtml(text)}</p>`;
   }
-  return marked.parse(text, { breaks: true, gfm: true });
+  const html = marked.parse(text, { breaks: true, gfm: true });
+  return window.DOMPurify ? DOMPurify.sanitize(html) : `<p>${escapeHtml(text).replaceAll("\n", "<br>")}</p>`;
 }
 
 function saveChatHistory() {
-  localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(state.chatHistory));
+  try {
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(state.chatHistory));
+  } catch (error) {
+    console.warn("Chat history could not be saved in this browser.", error);
+  }
 }
 
 function loadChatHistory() {
   try {
-    state.chatHistory = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || "[]");
+    const saved = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || "[]");
+    state.chatHistory = Array.isArray(saved)
+      ? saved.filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string")
+      : [];
   } catch {
     state.chatHistory = [];
   }
 }
 
-function showToast(message) {
+function showToast(message, isError = false) {
   toast.textContent = message;
+  toast.classList.toggle("error", isError);
   toast.hidden = false;
   window.clearTimeout(state.toastTimer);
   state.toastTimer = window.setTimeout(() => {
@@ -189,9 +209,12 @@ function renderDocuments() {
       <strong>${escapeHtml(doc.filename)}</strong>
       <div class="muted small">Indexed and ready for chat-based study.</div>
       <div class="document-actions">
-        <a class="nav-pill" href="${doc.file_path}" target="_blank" rel="noreferrer">Open file</a>
+        <a class="nav-pill" href="${escapeHtml(doc.file_path)}" target="_blank" rel="noreferrer">Open file</a>
+        <button class="ghost-btn delete-document" type="button">Delete</button>
       </div>
     `;
+    const deleteButton = card.querySelector(".delete-document");
+    deleteButton.addEventListener("click", () => deleteDocument(doc.id, doc.filename, deleteButton).catch(handleAsyncError));
     documentsList.appendChild(card);
   });
 }
@@ -220,6 +243,7 @@ function renderNotes() {
         <p class="muted small">${escapeHtml(note.chapter || note.unit || "Structured note")}</p>
       </div>
       <p>${escapeHtml(note.content.slice(0, 420))}${note.content.length > 420 ? "..." : ""}</p>
+      ${note.content.length > 420 ? `<details><summary>Read full section</summary><p>${escapeHtml(note.content)}</p></details>` : ""}
     `;
     notesContainer.appendChild(card);
   });
@@ -248,7 +272,7 @@ function renderQuiz(questions) {
   });
   const submit = document.createElement("button");
   submit.type = "button";
-  submit.className = "ripple-btn";
+  submit.className = "button button-primary";
   submit.textContent = "Evaluate Answers";
   submit.addEventListener("click", () => submitQuiz().catch(handleAsyncError));
   quizContainer.appendChild(submit);
@@ -256,8 +280,8 @@ function renderQuiz(questions) {
 
 async function loadSubjects() {
   state.subjects = await api("/subjects");
-  if (!state.selectedSubjectId && state.subjects.length) {
-    state.selectedSubjectId = state.subjects[0].id;
+  if (!state.subjects.some((item) => item.id === state.selectedSubjectId)) {
+    state.selectedSubjectId = state.subjects[0]?.id ?? null;
   }
   renderSubjects();
   updateSelectedSubjectLabel();
@@ -281,19 +305,40 @@ async function selectSubject(subjectId) {
   await loadNotes();
 }
 
+async function deleteDocument(documentId, filename, button) {
+  if (!window.confirm(`Delete ${filename}? Its extracted notes will also be removed.`)) return;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Deleting…";
+  }
+  try {
+    await api(`/documents/${documentId}`, { method: "DELETE" });
+    showToast("Document and extracted notes deleted.");
+    await loadSubjects();
+    loadAnalytics().catch((error) => console.warn("Could not refresh analytics after deleting a document:", error));
+  } finally {
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.textContent = "Delete";
+    }
+  }
+}
+
 async function createSubject(event) {
   event.preventDefault();
   const name = document.getElementById("subjectName").value.trim();
   const description = document.getElementById("subjectDescription").value.trim();
   if (!name) return;
 
-  await api("/subjects", {
+  const created = await api("/subjects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, description }),
   });
+  state.selectedSubjectId = created.id;
   event.target.reset();
   await loadSubjects();
+  await loadAnalytics();
   showToast("Subject created.");
 }
 
@@ -310,10 +355,18 @@ async function uploadPdf(event) {
   const formData = new FormData();
   formData.append("subject_id", state.selectedSubjectId);
   formData.append("file", file);
-  await api("/upload-pdf", { method: "POST", body: formData });
-  event.target.reset();
-  await loadSubjects();
-  showToast("PDF uploaded successfully.");
+  uploadButton.disabled = true;
+  uploadButton.textContent = "Extracting notes…";
+  try {
+    const result = await api("/upload-pdf", { method: "POST", body: formData });
+    event.target.reset();
+    await loadSubjects();
+    await loadAnalytics();
+    showToast(`${result.filename} uploaded. ${result.note_count} note sections extracted.`);
+  } finally {
+    uploadButton.disabled = false;
+    uploadButton.textContent = uploadButtonLabel;
+  }
 }
 
 async function askAI(event) {
@@ -346,9 +399,10 @@ async function askAI(event) {
     saveChatHistory();
     updateMetrics();
     scrollChatToBottom();
+    await loadAnalytics();
   } catch (error) {
     console.error("Subjectly chat failed:", error);
-    showToast(error.message || "AI request failed.");
+    showToast(error.message || "AI request failed.", true);
   } finally {
     setThinking(false);
   }
@@ -364,6 +418,13 @@ async function generateQuiz() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ subject_id: state.selectedSubjectId, count: 6 }),
   });
+  if (!data.questions.length) {
+    state.quiz = [];
+    state.quizId = null;
+    quizContainer.innerHTML = `<div class="empty-illustration"><div class="empty-orb empty-orb-warm"></div><div><strong>No searchable notes yet</strong><p class="muted small">Upload a text-based PDF with this subject first.</p></div></div>`;
+    return;
+  }
+  state.quizId = data.quiz_id;
   renderQuiz(data.questions);
 }
 
@@ -383,8 +444,7 @@ async function submitQuiz() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      subject_id: state.selectedSubjectId,
-      questions: state.quiz,
+      quiz_id: state.quizId,
       answers,
     }),
   });
@@ -406,6 +466,7 @@ async function submitQuiz() {
     `;
     quizContainer.appendChild(card);
   });
+  await loadAnalytics();
 }
 
 function clearChat() {
@@ -466,7 +527,23 @@ function autoResizeComposer() {
 
 function handleAsyncError(error) {
   console.error("Subjectly action failed:", error);
-  showToast(error.message || "Something went wrong.");
+  showToast(error.message || "Something went wrong.", true);
+}
+
+async function loadAnalytics() {
+  const [analytics, progress] = await Promise.all([api("/analytics"), api("/progress")]);
+  const container = document.getElementById("analyticsDetails");
+  const completion = document.getElementById("overallCompletion");
+  if (!container || !completion) return;
+  completion.textContent = `${progress.overall_completion}%`;
+  const summary = progress.subject_progress.map((item) =>
+    `<li><span>${escapeHtml(item.subject)}</span><strong>${item.completion}%</strong></li>`
+  ).join("");
+  const weakTopics = analytics.weak_topics.map((item) => escapeHtml(item.topic)).join(", ") || "None yet";
+  container.innerHTML = `
+    <div class="analytics-item"><span class="analytics-label">Subject progress</span><ul>${summary || "<li>Add a subject to begin.</li>"}</ul></div>
+    <div class="analytics-facts"><span><strong>${analytics.ai_usage.reduce((sum, item) => sum + item.count, 0)}</strong> assistant chats</span><span><strong>${escapeHtml(weakTopics)}</strong> topics to revisit</span></div>
+  `;
 }
 
 document.getElementById("subjectForm").addEventListener("submit", (event) => createSubject(event).catch(handleAsyncError));
@@ -475,7 +552,19 @@ document.getElementById("chatForm").addEventListener("submit", askAI);
 document.getElementById("generateTestBtn").addEventListener("click", () => generateQuiz().catch(handleAsyncError));
 document.getElementById("refreshSubjects").addEventListener("click", () => loadSubjects().catch(handleAsyncError));
 document.getElementById("clearChatBtn").addEventListener("click", clearChat);
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  try {
+    await api("/auth/logout", { method: "POST" });
+    window.location.assign("/login");
+  } catch (error) {
+    handleAsyncError(error);
+  }
+});
 questionInput.addEventListener("input", autoResizeComposer);
+document.getElementById("pdfFile").addEventListener("change", (event) => {
+  const selected = event.target.files[0];
+  document.getElementById("pdfFileName").textContent = selected ? selected.name : "No file selected";
+});
 
 loadChatHistory();
 renderChatHistory();
@@ -484,4 +573,4 @@ bindNavTracking();
 bindRippleEffects();
 updateMetrics();
 
-Promise.all([loadSubjects()]).catch(handleAsyncError);
+Promise.all([loadSubjects(), loadAnalytics()]).catch(handleAsyncError);

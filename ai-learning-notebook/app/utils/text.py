@@ -10,7 +10,6 @@ def clean_text(text: str) -> str:
     text = re.sub(r"\r", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[ \t]{2,}", " ", text)
-    text = re.sub(r"(?i)\b(?:dr|prof|associate professor|department of|university)\b.*", "", text)
     return text.strip()
 
 
@@ -172,8 +171,6 @@ def clean_answer_text(text: str) -> str:
                 cleaned.append("")
             continue
         if any(re.match(pattern, line, flags=re.IGNORECASE) for pattern in skip_patterns):
-            continue
-        if len(line.split()) <= 2 and not re.match(r"^(Definition|Key Points|Example)\b", line, flags=re.IGNORECASE):
             continue
         cleaned.append(re.sub(r"\s+", " ", line))
     result = "\n".join(cleaned).strip()

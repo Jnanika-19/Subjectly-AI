@@ -2,17 +2,28 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    subjects = relationship("Subject", back_populates="owner")
 
 
 class Subject(Base):
     __tablename__ = "subjects"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -21,6 +32,8 @@ class Subject(Base):
     chunks = relationship("Chunk", back_populates="subject", cascade="all, delete-orphan")
     interactions = relationship("AIInteraction", back_populates="subject", cascade="all, delete-orphan")
     quiz_attempts = relationship("QuizAttempt", back_populates="subject", cascade="all, delete-orphan")
+    quiz_sessions = relationship("QuizSession", back_populates="subject", cascade="all, delete-orphan")
+    owner = relationship("User", back_populates="subjects")
 
 
 class Document(Base):
@@ -101,3 +114,14 @@ class QuizAttempt(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     subject = relationship("Subject", back_populates="quiz_attempts")
+
+
+class QuizSession(Base):
+    __tablename__ = "quiz_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id"), nullable=False, index=True)
+    questions_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    subject = relationship("Subject", back_populates="quiz_sessions")

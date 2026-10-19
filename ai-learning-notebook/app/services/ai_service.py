@@ -20,24 +20,32 @@ class AIRequestFailedError(RuntimeError):
 
 class AIService:
     def generate_answer(self, prompt: str) -> str:
-        api_key = settings.groq_api_key.strip()
+        provider = settings.ai_provider
+        if provider == "openrouter":
+            api_key = settings.openrouter_api_key.strip()
+            base_url = "https://openrouter.ai/api/v1"
+            model = settings.openrouter_model
+        elif provider == "groq":
+            api_key = settings.groq_api_key.strip()
+            base_url = "https://api.groq.com/openai/v1"
+            model = settings.groq_model
+        else:
+            raise AIRequestFailedError(f"Unsupported AI_PROVIDER: {provider}")
+
         if not api_key:
-            raise APIKeyNotConfiguredError("API key not configured")
+            raise APIKeyNotConfiguredError(f"{provider.title()} API key not configured")
 
         try:
-            client = OpenAI(
-                api_key=api_key,
-                base_url="https://api.groq.com/openai/v1",
+            client = OpenAI(api_key=api_key, base_url=base_url)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
             )
-            response = client.responses.create(
-                model=settings.groq_model,
-                input=prompt,
-            )
-            return (response.output_text or "").strip()
+            return (response.choices[0].message.content or "").strip()
         except APIKeyNotConfiguredError:
             raise
         except Exception:
-            logger.exception("Groq request failed")
+            logger.exception("%s request failed", provider)
             raise AIRequestFailedError("AI request failed. Check server logs.")
 
 

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles.css?v=20261019-sidebar">
 </head>
 <body>
     <div class="ambient ambient-left"></div>
@@ -21,17 +21,18 @@
                 <h1>Subjectly</h1>
             </div>
         </div>
-        <nav class="nav-pills">
-            <a class="nav-pill active" href="#dashboard" data-tab="dashboard">Dashboard</a>
-            <a class="nav-pill" href="#notes" data-tab="notes">Notes</a>
-            <a class="nav-pill" href="#quiz" data-tab="quiz">Quiz</a>
-            <a class="nav-pill" href="#upload" data-tab="upload">Upload</a>
-            <a class="nav-pill" href="#analytics" data-tab="analytics">Analytics</a>
-        </nav>
     </header>
 
     <main class="app-shell">
         <aside class="sidebar card fade-in">
+            <nav class="app-nav" aria-label="Main navigation">
+                <p class="eyebrow">Workspace</p>
+                <a class="nav-pill active" href="#dashboard" data-tab="dashboard"><span aria-hidden="true">⌂</span>Dashboard</a>
+                <a class="nav-pill" href="#notes" data-tab="notes"><span aria-hidden="true">▤</span>Notes</a>
+                <a class="nav-pill" href="#quiz" data-tab="quiz"><span aria-hidden="true">✓</span>Quiz</a>
+                <a class="nav-pill" href="#upload" data-tab="upload"><span aria-hidden="true">↑</span>Upload</a>
+                <a class="nav-pill" href="#analytics" data-tab="analytics"><span aria-hidden="true">◷</span>Analytics</a>
+            </nav>
             <section class="sidebar-section">
                 <p class="eyebrow">Subjects</p>
                 <div class="section-head">
@@ -45,19 +46,20 @@
                     <button class="ripple-btn" type="submit">Create Subject</button>
                 </form>
             </section>
+            <button id="logoutBtn" class="ghost-btn logout-button" type="button">Sign out</button>
         </aside>
 
         <div class="main-column">
             <section id="dashboard" class="hero-card card fade-in">
                 <div class="hero-copy">
-                    <p class="eyebrow">Hackathon-Ready Workspace</p>
-                    <h2>Study with cleaner notes, smarter chat, and a workspace that feels premium from the first click.</h2>
-                    <p class="muted">Upload material, organize subjects, ask questions, and keep your learning flow anchored to your own documents.</p>
+                    <p class="eyebrow">Exam Prep Workspace</p>
+                    <h2>Turn your course PDFs into organized notes, practice quizzes, and answers grounded in your material.</h2>
+                    <p class="muted">Keep each subject together, review extracted sections, and practice with questions made from the notes you upload.</p>
                 </div>
                 <div class="hero-badges">
                     <span class="status-pill">FastAPI backend</span>
-                    <span class="status-pill">Groq powered</span>
-                    <span class="status-pill">RAG-ready notes</span>
+                    <span class="status-pill">Answers from your notes</span>
+                    <span class="status-pill">Subject-based practice</span>
                 </div>
             </section>
 
@@ -138,6 +140,7 @@
                         </div>
                         <form id="uploadForm" class="compact-form">
                             <input id="pdfFile" type="file" accept=".pdf" required>
+                            <span id="pdfFileName" class="muted small" aria-live="polite">No file selected</span>
                             <button class="ripple-btn" type="submit">Upload Source</button>
                         </form>
                         <div id="documentsList" class="documents-list"></div>
@@ -164,13 +167,11 @@
                                 <strong id="chatMessagesCount">0</strong>
                             </div>
                         </div>
-                        <div class="empty-illustration">
-                            <div class="empty-orb"></div>
-                            <div>
-                                <strong>Future-ready analytics</strong>
-                                <p class="muted small">The layout is prepared for deeper insights, trends, and subject-level productivity stats.</p>
-                            </div>
+                        <div class="analytics-item">
+                            <span class="analytics-label">Overall completion</span>
+                            <strong id="overallCompletion">0%</strong>
                         </div>
+                        <div id="analyticsDetails" class="analytics-stack" aria-live="polite"></div>
                     </section>
                 </aside>
             </section>
@@ -188,8 +189,8 @@
             <section id="quiz" class="panel card fade-in">
                 <div class="section-head">
                     <div>
-                        <p class="eyebrow">Quiz</p>
-                        <h2>Test Yourself</h2>
+                    <p class="eyebrow">Quiz</p>
+                        <h2>Practice from your notes</h2>
                     </div>
                     <button id="generateTestBtn" class="ghost-btn ripple-btn" type="button">Generate Quiz</button>
                 </div>
@@ -209,6 +210,7 @@
     <div id="toast" class="toast" hidden></div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+    <script src="/static/app.js?v=20261019-delete-fix"></script>
 </body>
 </html>

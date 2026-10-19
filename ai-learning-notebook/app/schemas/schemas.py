@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 
 class SubjectCreate(BaseModel):
-    name: str
-    description: str = ""
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
 
 
 class SubjectRead(BaseModel):
@@ -55,7 +55,8 @@ class NotesResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=5000)
+    subject_id: int | None = Field(default=None, ge=1)
 
 
 class ChatResponse(BaseModel):
@@ -63,28 +64,36 @@ class ChatResponse(BaseModel):
 
 
 class TestRequest(BaseModel):
-    subject_id: int
+    subject_id: int = Field(ge=1)
     count: int = Field(default=5, ge=3, le=10)
 
 
 class QuizQuestion(BaseModel):
     id: str
-    type: str
+    type: Literal["mcq", "short"]
     prompt: str
-    options: list[str] = []
+    options: list[str] = Field(default_factory=list)
     answer: str
     explanation: str
     topic: str
 
 
+class QuizQuestionPublic(BaseModel):
+    id: str
+    type: Literal["mcq", "short"]
+    prompt: str
+    options: list[str] = Field(default_factory=list)
+    topic: str
+
+
 class TestResponse(BaseModel):
+    quiz_id: str
     subject_id: int
-    questions: list[QuizQuestion]
+    questions: list[QuizQuestionPublic]
 
 
 class EvaluationRequest(BaseModel):
-    subject_id: int
-    questions: list[QuizQuestion]
+    quiz_id: str = Field(min_length=36, max_length=36)
     answers: dict[str, Any]
 
 

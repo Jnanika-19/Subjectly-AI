@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+import time
 from typing import Any
 
 import faiss
@@ -21,15 +22,22 @@ logger = logging.getLogger(__name__)
 class EmbeddingService:
     dimension = 256
     _hf_model: Any = None
+    _embedding_retry_after = 0.0
 
     def embed_texts(self, texts: list[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, self.dimension), dtype="float32")
         if settings.embedding_provider == "hf":
             return self._hf_embeddings(texts)
-        if settings.embedding_provider == "openai" and settings.openai_api_key:
+        if settings.embedding_provider == "openai":
+            if not settings.openai_api_key.strip():
+                raise RuntimeError("OPENAI_API_KEY is required when EMBEDDING_PROVIDER=openai.")
             return self._openai_embeddings(texts)
-        return self._mock_embeddings(texts)
+        if settings.embedding_provider == "mock":
+            return self._mock_embeddings(texts)
+        raise RuntimeError(
+            f"Unsupported EMBEDDING_PROVIDER: {settings.embedding_provider}. Choose hf, openai, or mock."
+        )
 
     def embed_query(self, text: str) -> np.ndarray:
         return self.embed_texts([text])[0]
@@ -97,9 +105,23 @@ class EmbeddingService:
         )
 
     def search(self, db: Session, question: str, subject_id: int | None, top_k: int) -> list[tuple[Chunk, float]]:
-        subject_ids = [subject_id] if subject_id else self._available_subject_ids(db)
+        if subject_id is not None:
+            if not db.query(Chunk.id).filter(Chunk.subject_id == subject_id).first():
+                return []
+            subject_ids = [subject_id]
+        else:
+            subject_ids = self._available_subject_ids(db)
+        if not subject_ids or top_k <= 0:
+            return []
         results: list[tuple[Chunk, float]] = []
-        query_vector = self.embed_query(question).reshape(1, -1).astype("float32")
+        if time.monotonic() < self._embedding_retry_after:
+            return self._keyword_search(db, question, subject_ids, top_k)
+        try:
+            query_vector = self.embed_query(question).reshape(1, -1).astype("float32")
+        except Exception as exc:
+            self._embedding_retry_after = time.monotonic() + 60
+            logger.warning("Embeddings are unavailable; using notes keyword search: %s", exc)
+            return self._keyword_search(db, question, subject_ids, top_k)
         faiss.normalize_L2(query_vector)
 
         for item_subject_id in subject_ids:
@@ -128,12 +150,22 @@ class EmbeddingService:
             candidate_count = min(settings.retrieve_candidates, index.ntotal)
             distances, indices = index.search(query_vector, candidate_count)
             chunk_ids = json.loads(metadata_file.read_text(encoding="utf-8"))
-            for score, idx in zip(distances[0], indices[0]):
-                if idx < 0 or idx >= len(chunk_ids):
-                    continue
-                chunk = db.query(Chunk).filter(Chunk.id == chunk_ids[idx]).first()
+            candidates = [
+                (chunk_ids[idx], float(score))
+                for score, idx in zip(distances[0], indices[0])
+                if 0 <= idx < len(chunk_ids)
+            ]
+            candidate_map = dict(candidates)
+            if not candidate_map:
+                continue
+            chunks_by_id = {
+                chunk.id: chunk
+                for chunk in db.query(Chunk).filter(Chunk.id.in_(candidate_map)).all()
+            }
+            for chunk_id, score in candidates:
+                chunk = chunks_by_id.get(chunk_id)
                 if chunk:
-                    results.append((chunk, self._hybrid_score(question, chunk, float(score))))
+                    results.append((chunk, self._hybrid_score(question, chunk, score)))
 
         results.sort(key=lambda item: item[1], reverse=True)
         filtered = [item for item in results if item[1] >= settings.min_relevance_score]
@@ -148,6 +180,28 @@ class EmbeddingService:
                 break
         return deduped
 
+    def _keyword_search(
+        self, db: Session, question: str, subject_ids: list[int], top_k: int
+    ) -> list[tuple[Chunk, float]]:
+        """Search the selected student's chunks when a vector model is unavailable."""
+        chunks = (
+            db.query(Chunk)
+            .filter(Chunk.subject_id.in_(subject_ids))
+            .order_by(Chunk.id.asc())
+            .all()
+        )
+        scored = []
+        for chunk in chunks:
+            metadata = json.loads(chunk.metadata_json or "{}")
+            content_score = keyword_overlap_score(question, chunk.content)
+            title_score = keyword_overlap_score(question, str(metadata.get("title", "")))
+            phrase_bonus = 0.1 if question.strip() and question.casefold() in chunk.content.casefold() else 0.0
+            score = min(1.0, content_score * 0.8 + title_score * 0.2 + phrase_bonus)
+            if score >= settings.min_relevance_score:
+                scored.append((chunk, score))
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return [(chunk, round(score, 3)) for chunk, score in scored[:top_k]]
+
     def _available_subject_ids(self, db: Session) -> list[int]:
         rows = db.query(Chunk.subject_id).distinct().all()
         return [row[0] for row in rows]
@@ -161,7 +215,9 @@ class EmbeddingService:
             raise RuntimeError(
                 "sentence-transformers is not installed. Run 'pip install -r requirements.txt'."
             ) from exc
-        self._hf_model = SentenceTransformer(settings.hf_embed_model)
+        # The model is cached locally after first use. Requiring local files
+        # prevents a blocked Hugging Face HEAD request from disabling chat.
+        self._hf_model = SentenceTransformer(settings.hf_embed_model, local_files_only=True)
         return self._hf_model
 
     @staticmethod

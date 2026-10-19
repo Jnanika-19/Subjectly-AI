@@ -1,92 +1,48 @@
 # Subjectly
 
-Subjectly is a FastAPI + vanilla frontend project that turns uploaded study PDFs into a polished AI study workspace. The app now uses secure backend-only Groq access, a simplified production-style service flow, and a modern chat-first interface.
+Subjectly is a FastAPI study workspace for uploading study PDFs and asking questions about them.
 
-## Folder Structure
+## Requirements
 
-```text
-ai-learning-notebook/
-├── app/
-│   ├── api/
-│   │   └── routes.py
-│   ├── core/
-│   │   └── config.py
-│   ├── db/
-│   │   └── database.py
-│   ├── models/
-│   │   └── models.py
-│   ├── schemas/
-│   │   └── schemas.py
-│   ├── services/
-│   │   ├── ai_service.py
-│   │   ├── analytics_service.py
-│   │   ├── embedding_service.py
-│   │   ├── pdf_service.py
-│   │   ├── quiz_service.py
-│   │   └── rag_service.py
-│   └── main.py
-├── data/
-│   ├── faiss/
-│   └── uploads/
-├── frontend/
-│   ├── static/
-│   │   ├── app.js
-│   │   └── styles.css
-│   └── templates/
-│       └── index.html
-├── .env.example
-├── README.md
-└── requirements.txt
-```
+- Python 3.12 (the pinned NumPy and FAISS versions require a compatible Python version)
+- An OpenRouter or Groq API key for AI-generated answers
 
-## Architecture
+## Run on Windows (PowerShell)
 
-Request flow:
+From the repository root, run:
 
-1. Frontend sends only `{"question": "..."}` to `POST /chat`
-2. `routes.py` handles request validation and error shaping
-3. `rag_service.py` retrieves notebook context from FAISS + SQLite
-4. `ai_service.py` sends the final prompt to Groq
-5. FastAPI returns `{"answer": "..."}` or a clean `{"error": "..."}` response
-
-## Security
-
-- The frontend does not collect or store API keys
-- Groq keys are loaded only from backend environment variables
-- Missing-key error: `{"error": "API key not configured"}`
-- Provider failure error: `{"error": "AI request failed. Check server logs."}`
-- Actual Groq exceptions are logged server-side
-
-## Environment Setup
-
-Create `.env` in the project root:
-
-```env
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=llama-3.1-8b-instant
-EMBEDDING_PROVIDER=hf
-HF_EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
-```
-
-## Features
-
-- Secure backend-managed Groq integration
-- Subjectly brand redesign with sticky navbar
-- Subject sidebar with upload workflow
-- ChatGPT-style chat bubbles and markdown responses
-- Local chat history with auto-scroll
-- Loading spinner, toast errors, ripple buttons, and card animations
-- RAG answer generation from uploaded notes
-- File delete confirmation modal and smooth removal animation
-
-## Run Locally
-
-```bash
-cd /Users/deekshasn/Documents/New\ project/ai-learning-notebook
-python3 -m venv .venv
-source .venv/bin/activate
+```powershell
+cd ai-learning-notebook
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Edit `ai-learning-notebook/.env` and add your provider key. The default is OpenRouter; set `OPENROUTER_API_KEY` to your key. For Groq, set `AI_PROVIDER=groq` and configure `GROQ_API_KEY`. Then run:
+
+```powershell
 uvicorn app.main:app --reload
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000)
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+If PowerShell blocks virtual environment activation, run `Set-ExecutionPolicy -Scope Process Bypass` in that terminal and activate again. If `py -3.12` is unavailable, install Python 3.12 first.
+
+## Run on macOS or Linux
+
+```bash
+cd ai-learning-notebook
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Add your Groq API key to `.env`, then start the app with `uvicorn app.main:app --reload`.
+
+## Sign-in setup
+
+Subjectly requires a configured local account. In `ai-learning-notebook/.env`, set `SUBJECTLY_LOGIN_EMAIL` and `SUBJECTLY_SESSION_SECRET`. Generate a password hash from the `ai-learning-notebook` folder by running `python -m app.services.auth_service`, then paste the printed `SUBJECTLY_LOGIN_PASSWORD_HASH` into `.env`. Generate a session secret with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Restart the app and sign in at `http://127.0.0.1:8000/login`. Set `SUBJECTLY_SESSION_COOKIE_SECURE=true` when using HTTPS; keep it `false` for local HTTP.
