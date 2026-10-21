@@ -69,7 +69,15 @@ Add your AI provider key and the generated value as `SUBJECTLY_SESSION_SECRET` i
 
 ## Deployment notes
 
-Subjectly is a FastAPI application. A deployment host must run the Python app and install the packages in `ai-learning-notebook/requirements.txt`; a static-only host such as a default Vercel static deployment will not run it by itself. Configure `SUBJECTLY_SESSION_SECRET` and your AI provider key as private environment variables in the host dashboard. Set `SUBJECTLY_SESSION_COOKIE_SECURE=true` when serving over HTTPS.
+Subjectly is a FastAPI application. On Vercel, set the Root Directory to `ai-learning-notebook` and the Framework Preset to **FastAPI**. Use this Install Command override to stay within Vercel's function bundle limit:
+
+```text
+pip install -r requirements-vercel.txt
+```
+
+Add `EMBEDDING_PROVIDER=mock` in Vercel's environment variables to use the lightweight built-in embedding option. It avoids the large local `sentence-transformers` model; semantic retrieval quality is lower, while keyword matching remains available. For OpenAI embeddings instead, use `EMBEDDING_PROVIDER=openai` and provide `OPENAI_API_KEY`.
+
+Configure `SUBJECTLY_SESSION_SECRET` and your chat provider key as private environment variables in the host dashboard. Set `SUBJECTLY_SESSION_COOKIE_SECURE=true` when serving over HTTPS.
 
 The app stores its SQLite database, uploaded PDFs, and search indexes under `ai-learning-notebook/data`. Use persistent storage for that directory, or configure external database and file storage, so user data survives restarts and redeployments. Do not commit `.env` or personal study data.
 
