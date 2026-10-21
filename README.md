@@ -16,7 +16,7 @@ cd .\ai-learning-notebook
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r requirements-local.txt
 Copy-Item .env.example .env
 ```
 
@@ -60,7 +60,7 @@ cd ai-learning-notebook
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r requirements-local.txt
 cp .env.example .env
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
@@ -69,13 +69,9 @@ Add your AI provider key and the generated value as `SUBJECTLY_SESSION_SECRET` i
 
 ## Deployment notes
 
-Subjectly is a FastAPI application. On Vercel, set the Root Directory to `ai-learning-notebook` and the Framework Preset to **FastAPI**. Use this Install Command override to stay within Vercel's function bundle limit:
+Subjectly is a FastAPI application. On Vercel, set the Root Directory to `ai-learning-notebook` and the Framework Preset to **FastAPI**. Leave the **Install Command override off** so Vercel can optimize the function bundle. The standard `requirements.txt` omits the large local `sentence-transformers` model; for local development, install `requirements-local.txt` instead.
 
-```text
-pip install -r requirements-vercel.txt
-```
-
-Add `EMBEDDING_PROVIDER=mock` in Vercel's environment variables to use the lightweight built-in embedding option. It avoids the large local `sentence-transformers` model; semantic retrieval quality is lower, while keyword matching remains available. For OpenAI embeddings instead, use `EMBEDDING_PROVIDER=openai` and provide `OPENAI_API_KEY`.
+Add `EMBEDDING_PROVIDER=mock` in Vercel's environment variables to use the lightweight built-in embedding option. It avoids the local model; semantic retrieval quality is lower, while keyword matching remains available. For OpenAI embeddings instead, use `EMBEDDING_PROVIDER=openai` and provide `OPENAI_API_KEY`.
 
 Configure `SUBJECTLY_SESSION_SECRET` and your chat provider key as private environment variables in the host dashboard. Set `SUBJECTLY_SESSION_COOKIE_SECURE=true` when serving over HTTPS.
 
